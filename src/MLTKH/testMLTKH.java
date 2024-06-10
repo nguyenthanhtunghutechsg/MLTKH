@@ -8,7 +8,7 @@ public class testMLTKH {
 		String	trans = "chainstore";
 		String	dataset = trans + "_trans.txt";
 		String	taxonomy = trans + "_tax.txt";
-		int	K = 2000;
+		int	K = 200000;
 		int maxTrans = Integer.MAX_VALUE;
 		//2436777
 		//2441027
