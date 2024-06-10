@@ -59,8 +59,9 @@ public class MLTKHAlgo {
     /** utility bin array for sub-tree utility */
 	private int[] utilityBinArraySU;   
 	/** utility bin array for local utility */
-	private int[] utilityBinArrayLU; 
-	
+	private int[] utilityBinArrayLU;
+	private int[] utilityBinArrayUtility;
+
 	/** a temporary buffer */
 	private int [] temp= new int [500];
 	
@@ -139,8 +140,6 @@ public class MLTKHAlgo {
     	this.activateSubtreeUtilityPruning = activateSubtreeUtilityPruning;
 
 		listItemHUI = new ArrayList<>();
-		mapItemToGWU = new HashMap<Integer, Double>();
-		mapItemToUtility = new HashMap<Integer, Double>();
 		mapItemToLevel = new HashMap<Integer, Integer>();
 		mapItemToAncestor = new HashMap<Integer, List<Integer>>();
 		taxonomy = new Taxonomy(taxonomyPath);
@@ -189,7 +188,7 @@ public class MLTKHAlgo {
 
 		// read the input file
 		Dataset dataset = new Dataset(inputPath, maximumTransactionCount, mapItemToAncestor,mapItemToLevel,maxLevel );
-		transCount = dataset.getTransactions().get(0).size();
+		transCount = dataset.getTransactionInAllLevel().get(0).size();
 
 
 		// record the start time
@@ -205,10 +204,10 @@ public class MLTKHAlgo {
 			System.out.println(dataset.toString());
 		}
 		
-//	    // Scan the database using utility-bin array to calculate the TWU
-//		// of each item
-//        useUtilityBinArrayToCalculateLocalUtilityFirstTime(dataset);
-//
+	    // Scan the database using utility-bin array to calculate the TWU
+		// of each item
+        useUtilityBinArrayToCalculateLocalUtilityFirstTime(dataset);
+
 //       // if in debug mode, show the TWU calculated using the utility-bin array
 //       if(DEBUG)
 //       {
@@ -221,13 +220,13 @@ public class MLTKHAlgo {
 //       }
 //
 //	   	// Now, we keep only the promising items (those having a twu >= minutil)
-//	   	List<Integer> itemsToKeep = new ArrayList<Integer>();
-//	   	for(int j=1; j< utilityBinArrayLU.length;j++) {
-//	   		if(utilityBinArrayLU[j] >= minUtil) {
-//	   			itemsToKeep.add(j);
-//	   		}
-//	   	}
-//
+	   	List<Integer> itemsToKeep = new ArrayList<Integer>();
+	   	for(int j=1; j< utilityBinArrayLU.length;j++) {
+	   		if(utilityBinArrayLU[j] >= minUtil) {
+	   			itemsToKeep.add(j);
+	   		}
+	   	}
+
 //	  // Sort promising items according to the increasing order of TWU
 //	   insertionSort(itemsToKeep, utilityBinArrayLU);
 //
@@ -747,21 +746,24 @@ public class MLTKHAlgo {
 	 * using a utility-bin array
 	 * @param dataset the transaction database
 	 */
-//	public void useUtilityBinArrayToCalculateLocalUtilityFirstTime(Dataset dataset) {
-//
-//		// Initialize utility bins for all items
-//		utilityBinArrayLU = new int[dataset.getMaxItem() + 1];
-//
-//		// Scan the database to fill the utility bins
-//		// For each transaction
-//		for (Transaction transaction : dataset.getTransactions()) {
-//			// for each item
-//			for(Integer item: transaction.getItems()) {
-//				// we add the transaction utility to the utility bin of the item
-//				utilityBinArrayLU[item] += transaction.transactionUtility;
-//			}
-//		}
-//	}
+	public void useUtilityBinArrayToCalculateLocalUtilityFirstTime(Dataset dataset) {
+
+		// Initialize utility bins for all items
+		utilityBinArrayLU = new int[dataset.getMaxItem() + 1];
+		utilityBinArrayUtility = new int[dataset.getMaxItem() + 1];
+
+		for (int level = 0; level < maxLevel; level++) {
+			List<Transaction> tranInLevel = dataset.getTransactionInAllLevel().get(level);
+			for (Transaction transaction : tranInLevel) {
+				// for each item
+				for (int i = 0; i < transaction.getItems().length; i++) {
+					int item = transaction.getItems()[i];
+					utilityBinArrayLU[item] += transaction.transactionUtility;
+					utilityBinArrayUtility[item]+=transaction.getUtilities()[i];
+				}
+			}
+		}
+	}
 	
 	/**
 	 * Scan the initial database to calculate the sub-tree utility of each item
@@ -799,73 +801,73 @@ public class MLTKHAlgo {
      * @param j the position of j in the list of promising items
      * @param itemsToKeep the list of promising items
      */
-    private void useUtilityBinArraysToCalculateUpperBounds(List<Transaction> transactionsPe, 
-    		int j, List<Integer> itemsToKeep) {
-
-    	// we will record the time used by this method for statistics purpose
-		long initialTime = System.currentTimeMillis();
-		
-		// For each promising item > e according to the total order
-		for (int i = j + 1; i < itemsToKeep.size(); i++) {
-			Integer item = itemsToKeep.get(i);
-			// We reset the utility bins of that item for computing the sub-tree utility and
-			// local utility
-			utilityBinArraySU[item] = 0;
-			utilityBinArrayLU[item] = 0;
-		}
-
-		int sumRemainingUtility;
-		// for each transaction
-		for (Transaction transaction : transactionsPe) {
-			// count the number of transactions read
-			transactionReadingCount++;
-			
-			// We reset the sum of reamining utility to 0;
-			sumRemainingUtility = 0;
-			// we set high to the last promising item for doing the binary search
-			int high = itemsToKeep.size() - 1;
-
-			// for each item in the transaction that is greater than i when reading the transaction backward
-			// Note: >= is correct here. It should not be >.
-			for (int i = transaction.getItems().length - 1; i >= transaction.offset; i--) {
-				// get the item
-				int item = transaction.getItems()[i];
-				
-				// We will check if this item is promising using a binary search over promising items.
-
-				// This variable will be used as a flag to indicate that we found the item or not using the binary search
-				boolean contains = false;
-				// we set "low" for the binary search to the first promising item position
-				int low = 0;
-
-				// do the binary search
-				while (high >= low) {
-					int middle = (low + high) >>> 1; // divide by 2
-					int itemMiddle = itemsToKeep.get(middle);
-					if (itemMiddle == item) {
-						// if we found the item, then we stop
-						contains = true;
-						break;
-					} else if (itemMiddle < item) {
-						low = middle + 1;
-					} else {
-						high = middle - 1;
-					}  
-				}
-				// if the item is promising
-				if (contains) {
-					// We add the utility of this item to the sum of remaining utility
-					sumRemainingUtility += transaction.getUtilities()[i];
-					// We update the sub-tree utility of that item in its utility-bin
-					utilityBinArraySU[item] += sumRemainingUtility + transaction.prefixUtility;
-					// We update the local utility of that item in its utility-bin
-					utilityBinArrayLU[item] += transaction.transactionUtility + transaction.prefixUtility;
-				}
-			}
-		}
-		// we update the time for database reduction for statistics purpose
-		timeDatabaseReduction += (System.currentTimeMillis() - initialTime);
-    }
+//    private void useUtilityBinArraysToCalculateUpperBounds(List<Transaction> transactionsPe,
+//    		int j, List<Integer> itemsToKeep) {
+//
+//    	// we will record the time used by this method for statistics purpose
+//		long initialTime = System.currentTimeMillis();
+//
+//		// For each promising item > e according to the total order
+//		for (int i = j + 1; i < itemsToKeep.size(); i++) {
+//			Integer item = itemsToKeep.get(i);
+//			// We reset the utility bins of that item for computing the sub-tree utility and
+//			// local utility
+//			utilityBinArraySU[item] = 0;
+//			utilityBinArrayLU[item] = 0;
+//		}
+//
+//		int sumRemainingUtility;
+//		// for each transaction
+//		for (Transaction transaction : transactionsPe) {
+//			// count the number of transactions read
+//			transactionReadingCount++;
+//
+//			// We reset the sum of reamining utility to 0;
+//			sumRemainingUtility = 0;
+//			// we set high to the last promising item for doing the binary search
+//			int high = itemsToKeep.size() - 1;
+//
+//			// for each item in the transaction that is greater than i when reading the transaction backward
+//			// Note: >= is correct here. It should not be >.
+//			for (int i = transaction.getItems().length - 1; i >= transaction.offset; i--) {
+//				// get the item
+//				int item = transaction.getItems()[i];
+//
+//				// We will check if this item is promising using a binary search over promising items.
+//
+//				// This variable will be used as a flag to indicate that we found the item or not using the binary search
+//				boolean contains = false;
+//				// we set "low" for the binary search to the first promising item position
+//				int low = 0;
+//
+//				// do the binary search
+//				while (high >= low) {
+//					int middle = (low + high) >>> 1; // divide by 2
+//					int itemMiddle = itemsToKeep.get(middle);
+//					if (itemMiddle == item) {
+//						// if we found the item, then we stop
+//						contains = true;
+//						break;
+//					} else if (itemMiddle < item) {
+//						low = middle + 1;
+//					} else {
+//						high = middle - 1;
+//					}
+//				}
+//				// if the item is promising
+//				if (contains) {
+//					// We add the utility of this item to the sum of remaining utility
+//					sumRemainingUtility += transaction.getUtilities()[i];
+//					// We update the sub-tree utility of that item in its utility-bin
+//					utilityBinArraySU[item] += sumRemainingUtility + transaction.prefixUtility;
+//					// We update the local utility of that item in its utility-bin
+//					utilityBinArrayLU[item] += transaction.transactionUtility + transaction.prefixUtility;
+//				}
+//			}
+//		}
+//		// we update the time for database reduction for statistics purpose
+//		timeDatabaseReduction += (System.currentTimeMillis() - initialTime);
+//    }
 
 
 
@@ -874,80 +876,80 @@ public class MLTKHAlgo {
      * @param itemset the itemset
      * @throws IOException if error while writting to output file
      */
-    private void output(int tempPosition, int utility) throws IOException {
-        patternCount++;
-        /*
-        	// if user wants to save the results to memory
-		if (writer == null) {
-			// we copy the temporary buffer into a new int array
-			int[] copy = new int[tempPosition+1];
-			System.arraycopy(temp, 0, copy, 0, tempPosition+1);
-			// we create the itemset using this array and add it to the list of itemsets
-			// found until now
-			highUtilityItemsets.addItemset(new Itemset(copy, utility),copy.length); 
-		} else {
-			// if user wants to save the results to file
-			// create a stringuffer
-			StringBuffer buffer = new StringBuffer();
-			// append each item from the itemset to the stringbuffer, separated by spaces
-			for (int i = 0; i <= tempPosition; i++) {
-				buffer.append(temp[i]);
-				if (i != tempPosition) {
-					buffer.append(' ');
-				}
-			}
-			// append the utility of the itemset
-			buffer.append(" #UTIL: ");
-			buffer.append(utility);
-			
-			// write the stringbuffer to file and create a new line
-			// so that we are ready for writing the next itemset.
-			writer.write(buffer.toString());
-			writer.newLine();
-		}
-		*/
-    }
-
-
-    public static void printPeakHeapUsage()
-    {
-    	try {
-            List<MemoryPoolMXBean> pools = ManagementFactory.getMemoryPoolMXBeans();
-            // we print the result in the console
-			double total = 0;
-			for (MemoryPoolMXBean memoryPoolMXBean : pools) {
-				if (memoryPoolMXBean.getType() == MemoryType.HEAP) {
-					long peakUsed = memoryPoolMXBean.getPeakUsage().getUsed();
-					//System.out.println(String.format("Peak used for: %s is %.2f", memoryPoolMXBean.getName(), (double)peakUsed/1024/1024));
-					total = total + peakUsed;
-				}
-			}
-			System.out.println(String.format("Total heap peak used: %f MB", total/1024/1024));
-     
-       } catch (Throwable t) {
-            System.err.println("Exception in agent: " + t);
-       }
-    }	
-
- 
-    /**
-     * Print statistics about the latest execution of the EFIM algorithm.
-     */
+//    private void output(int tempPosition, int utility) throws IOException {
+//        patternCount++;
+//        /*
+//        	// if user wants to save the results to memory
+//		if (writer == null) {
+//			// we copy the temporary buffer into a new int array
+//			int[] copy = new int[tempPosition+1];
+//			System.arraycopy(temp, 0, copy, 0, tempPosition+1);
+//			// we create the itemset using this array and add it to the list of itemsets
+//			// found until now
+//			highUtilityItemsets.addItemset(new Itemset(copy, utility),copy.length);
+//		} else {
+//			// if user wants to save the results to file
+//			// create a stringuffer
+//			StringBuffer buffer = new StringBuffer();
+//			// append each item from the itemset to the stringbuffer, separated by spaces
+//			for (int i = 0; i <= tempPosition; i++) {
+//				buffer.append(temp[i]);
+//				if (i != tempPosition) {
+//					buffer.append(' ');
+//				}
+//			}
+//			// append the utility of the itemset
+//			buffer.append(" #UTIL: ");
+//			buffer.append(utility);
+//
+//			// write the stringbuffer to file and create a new line
+//			// so that we are ready for writing the next itemset.
+//			writer.write(buffer.toString());
+//			writer.newLine();
+//		}
+//		*/
+//    }
+//
+//
+//    public static void printPeakHeapUsage()
+//    {
+//    	try {
+//            List<MemoryPoolMXBean> pools = ManagementFactory.getMemoryPoolMXBeans();
+//            // we print the result in the console
+//			double total = 0;
+//			for (MemoryPoolMXBean memoryPoolMXBean : pools) {
+//				if (memoryPoolMXBean.getType() == MemoryType.HEAP) {
+//					long peakUsed = memoryPoolMXBean.getPeakUsage().getUsed();
+//					//System.out.println(String.format("Peak used for: %s is %.2f", memoryPoolMXBean.getName(), (double)peakUsed/1024/1024));
+//					total = total + peakUsed;
+//				}
+//			}
+//			System.out.println(String.format("Total heap peak used: %f MB", total/1024/1024));
+//
+//       } catch (Throwable t) {
+//            System.err.println("Exception in agent: " + t);
+//       }
+//    }
+//
+//
+//    /**
+//     * Print statistics about the latest execution of the EFIM algorithm.
+//     */
 	public void printStats() {
 
 		System.out.println("========== EFIM v97 - STATS ============");
 		System.out.println(" minUtil = " + minUtil);
-		System.out.println(" High utility itemsets count: " + patternCount);	
+		System.out.println(" High utility itemsets count: " + patternCount);
 		System.out.println(" Total time ~: " + (endTimestamp - startTimestamp)
 				+ " ms");
-		System.out.println(" Transaction merge count ~: " + mergeCount);	
-		System.out.println(" Transaction read count ~: " + transactionReadingCount);	
+		System.out.println(" Transaction merge count ~: " + mergeCount);
+		System.out.println(" Transaction read count ~: " + transactionReadingCount);
 
 		// if in debug mode, we show more information
 		if(DEBUG) {
-			
+
 			System.out.println(" Time intersections ~: " + timeIntersections
-					+ " ms");	
+					+ " ms");
 			System.out.println(" Time database reduction ~: " + timeDatabaseReduction
 					+ " ms");
 			System.out.println(" Time promising items ~: " + timeIdentifyPromisingItems

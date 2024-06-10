@@ -101,9 +101,13 @@ public class Dataset {
         return result;	// create the transaction
     }
 
-    // returns the list of all transactions
-    public List<List<Transaction>> getTransactions() {
+
+    public List<List<Transaction>> getTransactionInAllLevel() {
         return transactionInAllLevel;
+    }
+
+    public long getSumTransLength() {
+        return sumTransLength;
     }
 
     // returns the largest item within the database
