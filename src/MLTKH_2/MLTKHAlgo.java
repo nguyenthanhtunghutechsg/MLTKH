@@ -111,6 +111,7 @@ public class MLTKHAlgo {
 	Taxonomy taxonomy = null;						/** for describing the taxonomy of a dataset **/
 	Map<Integer, List<Integer>> mapItemToChild;
 	List<Set<Integer>> listItemHUI;
+	List<List<Integer>> listItemEachLevel;
 	/** 
 	 * Constructor
 	 */
@@ -146,6 +147,8 @@ public class MLTKHAlgo {
 		mapItemToAncestor = new HashMap<Integer, List<Integer>>();
 		taxonomy = new Taxonomy(taxonomyPath);
 		mapItemToChild = new HashMap<>();
+		listItemEachLevel = new ArrayList<>();
+
 
 		for (Map.Entry<Integer, Integer> entry : taxonomy.mapItemToParent.entrySet()) {
 			Integer childItem = entry.getKey();
@@ -182,6 +185,12 @@ public class MLTKHAlgo {
 		for (int i = 0; i < maxLevel; i++) {
 			Set<Integer> list = new HashSet<>();
 			listItemHUI.add(list);
+			listItemEachLevel.add(new ArrayList<>());
+			for(Map.Entry<Integer,Integer> entry  : mapItemToLevel.entrySet()){
+				if(entry.getValue() - 1 == i){
+					listItemEachLevel.get(i).add(entry.getKey());
+				}
+			}
 		}
 		this.candidateCount = 0;
 		this.minUtil = 1;
@@ -205,14 +214,10 @@ public class MLTKHAlgo {
 			System.out.println("===== Initial database === ");
 			System.out.println(dataset.toString());
 		}
-		
-	    // Scan the database using utility-bin array to calculate the TWU
-		// of each item
+
         useUtilityBinArrayToCalculateLocalUtilityFirstTime(dataset);
+
 		List<Double> listUtility = new ArrayList<>();
-//		for (int i = 0; i < transCount; i++) {
-//			listUtility.add(TUs[i]);
-//		}
 		for (int i = 0; i < utilityBinArrayUtility.length; i++) {
 			listUtility.add(utilityBinArrayUtility[i]);
 		}
@@ -223,248 +228,100 @@ public class MLTKHAlgo {
 			minUtil = 1;
 		}
 
-//       // if in debug mode, show the TWU calculated using the utility-bin array
-//       if(DEBUG)
-//       {
-//	    	System.out.println("===== TWU OF SINGLE ITEMS === ");
-//			for (int i = 1; i < utilityBinArrayLU.length; i++)
-//			{
-//				System.out.println("item : " + i + " twu: " + utilityBinArrayLU[i]);
-//			}
-//			System.out.println();
-//       }
-//
-//	   	// Now, we keep only the promising items (those having a twu >= minutil)
-	   	List<Integer> itemsToKeep = new ArrayList<Integer>();
-	   	for(int j=1; j< utilityBinArrayLU.length;j++) {
-	   		if(utilityBinArrayLU[j] >= minUtil) {
-	   			itemsToKeep.add(j);
-	   		}
-	   	}
-
-	  // Sort promising items according to the increasing order of TWU
-	   insertionSort(itemsToKeep, utilityBinArrayLU);
-
-	   // Rename promising items according to the increasing order of TWU.
-	   // This will allow very fast comparison between items later by the algorithm
-	   // This structure will store the new name corresponding to each old name
-       oldNameToNewNames = new int[dataset.getMaxItem() + 1];
-       // This structure will store the old name corresponding to each new name
-       newNamesToOldNames = new int[dataset.getMaxItem() + 1];
-       // We will now give the new names starting from the name "1"
-       int currentName = 1;
-       // For each item in increasing order of TWU
-       for (int j=0; j< itemsToKeep.size(); j++)
-	   {
-    	   // get the item old name
-    	   int item = itemsToKeep.get(j);
-    	   // give it the new name
-		   oldNameToNewNames[item] = currentName;
-		   // remember its old name
-		   newNamesToOldNames[currentName] = item;
-		   // replace its old name by the new name in the list of promising items
-		   itemsToKeep.set(j, currentName);
-		   // increment by one the current name so that
-		   currentName++;
-	   }
-
-        // remember the number of promising item
-		newItemCount = itemsToKeep.size();
-		// initialize the utility-bin array for counting the subtree utility
-		utilityBinArraySU = new double[newItemCount + 1];
-
-		// if in debug mode, print to the old names and new names to the console
-		// to check if they are correct
-		if (DEBUG) {
-			System.out.println(itemsToKeep);
-			System.out.println(Arrays.toString(oldNameToNewNames));
-			System.out.println(Arrays.toString(newNamesToOldNames));
-		}
-//
-//        // We now loop over each transaction from the dataset
-//		// to remove unpromising items
 		for (int level = 0; level < maxLevel; level++) {
+			List<Integer> itemsToKeep = new ArrayList<Integer>();
+			for(Integer item: listItemEachLevel.get(level)){
+				if(utilityBinArrayLU[item] >= minUtil) {
+					itemsToKeep.add(item);
+				}
+			}
+			insertionSort(itemsToKeep, utilityBinArrayLU);
+			oldNameToNewNames = new int[dataset.getMaxItem() + 1];
+			newNamesToOldNames = new int[dataset.getMaxItem() + 1];
+			int currentName = 1;
+			for (int j=0; j< itemsToKeep.size(); j++)
+			{
+				int item = itemsToKeep.get(j);
+				oldNameToNewNames[item] = currentName;
+				newNamesToOldNames[currentName] = item;
+				itemsToKeep.set(j, currentName);
+				currentName++;
+			}
+			newItemCount = itemsToKeep.size();
+			utilityBinArraySU = new double[newItemCount + 1];
 			List<Transaction> datasetInLevel = dataset.getTransactionInAllLevel().get(level);
 			for(int tid=0; tid< datasetInLevel.size();tid++)
 			{
-				// Get the transaction
 				Transaction transaction  = datasetInLevel.get(tid);
-				// Remove unpromising items from the transaction and at the same time
-				// rename the items in the transaction according to their new names
-				// and sort the transaction by increasing TWU order
 				transaction.removeUnpromisingItems(oldNameToNewNames);
 			}
-		}
-
-//    	// Now we will sort transactions in the database according to the proposed
-//    	// total order on transaction (the lexicographical order when transactions
-//    	// are read backward).
-	  	long timeStartSorting = System.currentTimeMillis();
-//    	// We only sort if transaction merging is activated
-    	if(activateTransactionMerging){
-			for (int level = 0; level < maxLevel; level++) {
-				// Sort the dataset using a new comparator
-				Collections.sort(dataset.getTransactionInAllLevel().get(level), new Comparator<Transaction>(){
-					@Override
-					/**
-					 * Compare two transactions
-					 */
-					public int compare(Transaction t1, Transaction t2) {
-						// we will compare the two transaction items by items starting
-						// from the last items.
-						int pos1 = t1.items.length - 1;
-						int pos2 = t2.items.length - 1;
-
-						// if the first transaction is smaller than the second one
-						if(t1.items.length < t2.items.length){
-							// while the current position in the first transaction is >0
-							while(pos1 >=0){
-								int subtraction = t2.items[pos2]  - t1.items[pos1];
-								if(subtraction !=0){
-									return subtraction;
-								}
-								pos1--;
-								pos2--;
-							}
-							// if they ware the same, they we compare based on length
-							return -1;
-
-							// else if the second transaction is smaller than the first one
-						}else if (t1.items.length > t2.items.length){
-							// while the current position in the second transaction is >0
-							while(pos2 >=0){
-								int subtraction = t2.items[pos2]  - t1.items[pos1];
-								if(subtraction !=0){
-									return subtraction;
-								}
-								pos1--;
-								pos2--;
-							}
-							// if they are the same, they we compare based on length
-							return 1;
-
-						}else{
-							// else if both transactions have the same size
-							while(pos2 >=0){
-								int subtraction = t2.items[pos2]  - t1.items[pos1];
-								if(subtraction !=0){
-									return subtraction;
-								}
-								pos1--;
-								pos2--;
-							}
-							// if they ware the same, they we compare based on length
-							return 0;
-						}
-					}
-
-				});
-			}
-		}
-
-//
-//        	// =======================REMOVE EMPTY TRANSACTIONS==========================
-//        	// After removing unpromising items, it may be possible that some transactions
-//        	// are empty. We will now remove these transactions from the database.
-//    		// for each transaction
-			for (int level = 0; level < maxLevel; level++) {
-				int emptyTransactionCount = 0;
-				for(int i=0; i< dataset.getTransactionInAllLevel().get(level).size();i++)
-				{
-					// if the transaction length is 0, increase the number of empty transactions
-					Transaction transaction  = dataset.getTransactionInAllLevel().get(level).get(i);
-					if(transaction.items.length == 0){
-						emptyTransactionCount++;
-					}else{
-						break;
-					}
-				}
-				dataset.transactionInAllLevel.set(level,dataset.getTransactionInAllLevel().get(level)
-						.subList(emptyTransactionCount, dataset.getTransactionInAllLevel().get(level).size()));
-
-			}
-
-//        	// To remove empty transactions, we just ignore the first transactions from the dataset
-//        	// The reason is that empty transactions are always at the begining of the dataset
-//        	// since transactions are sorted by size
-//
-//    	}
-//
-//
-//    	// record the total time spent for sorting
-   	timeSort = System.currentTimeMillis() - timeStartSorting;
-//
-//    	// if in debug mode, print the database after sorting and removing promising items
-//		if(DEBUG)
-//		{
-//			System.out.println("===== Database without unpromising items and sorted by TWU increasing order === ");
-//			System.out.println(dataset.toString());
-//		}
-//
-//		// Use an utility-bin array to calculate the sub-tree utility of each item
-    	useUtilityBinArrayToCalculateSubtreeUtilityFirstTime(dataset);
-//
-//    	// Calculate the set of items that pass the sub-tree utility pruning condition
-		List<Integer> itemsToExplore = new ArrayList<Integer>();
-		// if subtree utility pruning is activated
-		if(activateSubtreeUtilityPruning){
-			// for each item
-			for(Integer item : itemsToKeep){
-				// if the subtree utility is higher or equal to minutil, then keep it
-				if (utilityBinArraySU[item] >= minUtil) {
-					itemsToExplore.add(item);
+			Collections.sort(datasetInLevel, (t1, t2) -> {
+                int pos1 = t1.items.length - 1;
+                int pos2 = t2.items.length - 1;
+                if(t1.items.length < t2.items.length){
+                    while(pos1 >=0){
+                        int subtraction = t2.items[pos2]  - t1.items[pos1];
+                        if(subtraction !=0){
+                            return subtraction;
+                        }
+                        pos1--;
+                        pos2--;
+                    }
+                    return -1;
+                }else if (t1.items.length > t2.items.length){
+                    while(pos2 >=0){
+                        int subtraction = t2.items[pos2]  - t1.items[pos1];
+                        if(subtraction !=0){
+                            return subtraction;
+                        }
+                        pos1--;
+                        pos2--;
+                    }
+                    return 1;
+                }else{
+                    while(pos2 >=0){
+                        int subtraction = t2.items[pos2]  - t1.items[pos1];
+                        if(subtraction !=0){
+                            return subtraction;
+                        }
+                        pos1--;
+                        pos2--;
+                    }
+                    return 0;
+                }
+            });
+			int emptyTransactionCount = 0;
+			for(int i=0; i< datasetInLevel.size();i++)
+			{
+				Transaction transaction  = datasetInLevel.get(i);
+				if(transaction.items.length == 0){
+					emptyTransactionCount++;
+				}else{
+					break;
 				}
 			}
-    	}
-		List<List<Integer>> ItemToKeepInAllLevel = new ArrayList<>();
-		List<List<Integer>> ItemToExploreInAllLevel = new ArrayList<>();
-		for (int i = 0; i < maxLevel; i++) {
-			ItemToKeepInAllLevel.add(new ArrayList<>());
-			ItemToExploreInAllLevel.add(new ArrayList<>());
-		}
-		for(Integer item : itemsToKeep){
-			int level = mapItemToLevel.get(newNamesToOldNames[item])-1;
-			ItemToKeepInAllLevel.get(level).add(item);
-		}
-		for(Integer item : itemsToExplore){
-			int level = mapItemToLevel.get(newNamesToOldNames[item])-1;
-			ItemToExploreInAllLevel.get(level).add(item);
-		}
-//
-//		// If in debug mode, show the list of promising items
-//    	if(DEBUG)
-//    	{
-//	       	System.out.println("===== List of promising items === ");
-//	       	System.out.println(itemsToKeep);
-//    	}
-//
-////    	//======
-//        // Recursive call to the algorithm
-//       	// If subtree utility pruning is activated
-//    	if(activateSubtreeUtilityPruning){
-//    		// We call the recursive algorithm with the database, secondary items and primary items
-		for (int i = 0; i < maxLevel; i++) {
-			backtrackingEFIM(dataset.getTransactionInAllLevel().get(i), ItemToKeepInAllLevel.get(i)
-					, ItemToExploreInAllLevel.get(i), 0);
+			dataset.transactionInAllLevel.set(level,datasetInLevel
+					.subList(emptyTransactionCount, datasetInLevel.size()));
+			useUtilityBinArrayToCalculateSubtreeUtilityFirstTime(datasetInLevel);
+			List<Integer> itemsToExplore = new ArrayList<Integer>();
+			if(activateSubtreeUtilityPruning){
+				for(Integer item : itemsToKeep){
+					if (utilityBinArraySU[item] >= minUtil) {
+						itemsToExplore.add(item);
+					}
+				}
+			}
+			backtrackingEFIM(datasetInLevel, itemsToKeep
+					, itemsToExplore, 0);
 		}
 
-//    	}else{
-//    		// We call the recursive algorithm with the database and secondary items
-//    		backtrackingEFIM(dataset.getTransactions(), itemsToKeep, itemsToKeep, 0);
-//    	}
-//
-//		// record the end time
 		endTimestamp = System.currentTimeMillis();
-//
-//		//close the output file
+
 		if(outputPath != null) {
 			System.out.println("- Saving results...");
 			writeResultTofile(outputPath);
 		}
-//
 		printPeakHeapUsage();
-		// return the set of high-utility itemsets
-       //return highUtilityItemsets;
 		return null;
     }
 
@@ -525,40 +382,16 @@ public class MLTKHAlgo {
      */
     private void backtrackingEFIM( List<Transaction> transactionsOfP,
     		List<Integer> itemsToKeep, List<Integer> itemsToExplore, int prefixLength) throws IOException {
-
-    	// update the number of candidates explored so far
 		candidateCount += itemsToExplore.size();
-
-        // ========  for each frequent item  e  =============
 		for (int j = 0; j < itemsToExplore.size(); j++) {
 			Integer e = itemsToExplore.get(j);
-
-			// ========== PERFORM INTERSECTION =====================
-			// Calculate transactions containing P U {e}
-			// At the same time project transactions to keep what appears after "e"
-	        List<Transaction> transactionsPe = new ArrayList<Transaction>();
-
-	        // variable to calculate the utility of P U {e}
+	        List<Transaction> transactionsPe = new ArrayList<>();
 			int utilityPe = 0;
-
-			// For merging transactions, we will keep track of the last transaction read
-			// and the number of identical consecutive transactions
 			Transaction previousTransaction = null;
 			int consecutiveMergeCount = 0;
-
-	        // this variable is to record the time for performing intersection
 			long timeFirstIntersection = System.currentTimeMillis();
-
-			// For each transaction
 	        for(Transaction transaction : transactionsOfP) {
-	        	// Increase the number of transaction read
-	        	transactionReadingCount++;
-
-	        	// To record the time for performing binary searh
 	        	long timeBinaryLocal = System.currentTimeMillis();
-
-	        	// we remember the position where e appears.
-	        	// we will call this position an "offset"
 	        	int positionE = -1;
 	        	// Variables low and high for binary search
 	    		int low = transaction.offset;
@@ -578,16 +411,6 @@ public class MLTKHAlgo {
 	    		}
 	    		// record the time spent for performing the binary search
 	        	timeBinarySearch +=  System.currentTimeMillis() - timeBinaryLocal;
-
-//	        	if(prefixLength == 0 && newNamesToOldNames[e] == 385) {
-//		        	for(int i=0; i < transaction.getItems().length; i++) {
-//		        		if(transaction.getItems()[i] == e) {
-//		        			innerSum += transaction.getUtilities()[i];
-//		        		}
-//		        	}
-//		        }
-
-	        	// if 'e' was found in the transaction
 	            if (positionE > -1  ) {
 
 	            	// optimization: if the 'e' is the last one in this transaction,
@@ -824,29 +647,24 @@ public class MLTKHAlgo {
 	 * using a utility-bin array
 	 * @param dataset the transaction database
 	 */
-	public void useUtilityBinArrayToCalculateSubtreeUtilityFirstTime(Dataset dataset) {
+	public void useUtilityBinArrayToCalculateSubtreeUtilityFirstTime(List<Transaction> dataset) {
 
 		int sumSU;
-		// Scan the database to fill the utility-bins of each item
-		// For each transaction
-		for (int level = 0; level < maxLevel; level++) {
-			List<Transaction> tranInLevel = dataset.getTransactionInAllLevel().get(level);
-			for (Transaction transaction : tranInLevel) {
-				// We will scan the transaction backward. Thus,
-				// the current sub-tree utility in that transaction is zero
-				// for the last item of the transaction.
-				sumSU = 0;
+		for (Transaction transaction : dataset) {
+			// We will scan the transaction backward. Thus,
+			// the current sub-tree utility in that transaction is zero
+			// for the last item of the transaction.
+			sumSU = 0;
 
-				// For each item when reading the transaction backward
-				for(int i = transaction.getItems().length-1; i >=0; i--) {
-					// get the item
-					Integer item = transaction.getItems()[i];
+			// For each item when reading the transaction backward
+			for(int i = transaction.getItems().length-1; i >=0; i--) {
+				// get the item
+				Integer item = transaction.getItems()[i];
 
-					// we add the utility of the current item to its sub-tree utility
-					sumSU += transaction.getUtilities()[i];
-					// we add the current sub-tree utility to the utility-bin of the item
-					utilityBinArraySU[item] += sumSU;
-				}
+				// we add the utility of the current item to its sub-tree utility
+				sumSU += transaction.getUtilities()[i];
+				// we add the current sub-tree utility to the utility-bin of the item
+				utilityBinArraySU[item] += sumSU;
 			}
 		}
 
@@ -1041,15 +859,11 @@ public class MLTKHAlgo {
 		while (iter.hasNext()) {
 			StringBuffer buffer = new StringBuffer();
 			ItemsetTKO itemset = (ItemsetTKO) iter.next();
-
-			// append the prefix
 			for (int i = 0; i < itemset.getItemset().length; i++) {
 				buffer.append(itemset.getItemset()[i]);
 				buffer.append(' ');
 			}
 			buffer.append(itemset.item);
-
-			// append the utility value
 			buffer.append(" #UTIL: ");
 			buffer.append(String.format("%.5f", itemset.utility));
 

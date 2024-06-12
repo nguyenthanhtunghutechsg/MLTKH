@@ -491,6 +491,9 @@ public class MLTKHAlgo {
 			}
 			
 			while(comparison > 0){
+				if(itemJ==69124&&itemI>69119){
+					System.out.println("1");
+				}
 				items.set(i+1, itemI);
 
 				i--;
@@ -499,7 +502,8 @@ public class MLTKHAlgo {
 				}
 				
 				itemI = items.get(i);
-
+				levelOfItemI = mapItemToLevel.get(itemI);
+				levelOfItemJ = mapItemToLevel.get(itemJ);
 				if(levelOfItemI != levelOfItemJ){
 					comparison = levelOfItemI-levelOfItemJ;
 				}else{
@@ -526,7 +530,6 @@ public class MLTKHAlgo {
 
     	// update the number of candidates explored so far
 		candidateCount += itemsToExplore.size();
-
         // ========  for each frequent item  e  =============
 		for (int j = 0; j < itemsToExplore.size(); j++) {
 			Integer e = itemsToExplore.get(j);
@@ -1039,19 +1042,13 @@ public class MLTKHAlgo {
 		while (iter.hasNext()) {
 			StringBuffer buffer = new StringBuffer();
 			ItemsetTKO itemset = (ItemsetTKO) iter.next();
-
-			// append the prefix
 			for (int i = 0; i < itemset.getItemset().length; i++) {
 				buffer.append(itemset.getItemset()[i]);
 				buffer.append(' ');
 			}
 			buffer.append(itemset.item);
-
-			// append the utility value
 			buffer.append(" #UTIL: ");
 			buffer.append(String.format("%.5f", itemset.utility));
-
-			// write to file
 			writer.write(buffer.toString());
 			if (iter.hasNext()) {
 				writer.newLine();
