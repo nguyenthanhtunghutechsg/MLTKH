@@ -1,10 +1,12 @@
-package MLTKH;
+package MLTKH_2;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryPoolMXBean;
+import java.lang.management.MemoryType;
 import java.util.*;
-import java.lang.management.*;
 
 
 
@@ -127,7 +129,7 @@ public class MLTKHAlgo {
        * @return the itemsets or null if the user choose to save to file
      * @throws IOException if exception while reading/writing to file
      */
-    public ItemsetTKO runAlgorithm(int K, String inputPath,String taxonomyPath, String outputPath, boolean activateTransactionMerging, int maximumTransactionCount, boolean activateSubtreeUtilityPruning) throws IOException {
+    public ItemsetTKO runAlgorithm(int K, String inputPath, String taxonomyPath, String outputPath, boolean activateTransactionMerging, int maximumTransactionCount, boolean activateSubtreeUtilityPruning) throws IOException {
     	
     	// reset variables for statistics
     	mergeCount=0;

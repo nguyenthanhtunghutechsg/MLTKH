@@ -8,7 +8,7 @@ public class testMLTKO {
 		String	trans = "chainstore";
 		String	dataset = trans + "_trans.txt";
 		String	taxonomy = trans + "_tax.txt";
-		int	K = 2000;
+		int	K = 1000;
 		//2436777
 		//2441027
 		boolean	eucp = true;

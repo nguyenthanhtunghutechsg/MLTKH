@@ -1,4 +1,4 @@
-package MLTKH;
+package MLTKH_2;
  
 // ML-HUI-MINER ALGORITHM MULTI-CORE
 // ---------------------------------
